@@ -10,46 +10,28 @@ import {BaseTest} from './utils/BaseTest.sol';
 
 import {ChangeSdEmissionAdminPayload} from '../src/contracts/ChangeSdEmissionAdminPayload.sol';
 
-contract EmissionTest is BaseTest {
-  /// @dev Used to simplify the definition of a program of emissions
-  /// @param asset The asset on which to put reward on, usually Aave atokens or variable debt tokens
-  /// @param emission Total emission of a `reward` token during the whole distribution duration defined
-  /// E.g. With an emission of 1_000_000 OP tokens during 10 days, an emission of 10% for aUSDC would be
-  /// 1_000_000 * 1e18 * 10% / 10 days in seconds = 100_000 * 1e18 / 864_000 = ~ 0.11574 * 1e18
-  struct EmissionPerAsset {
-    address asset;
-    uint256 emission;
-  }
+contract ChangeSdEmissionAdminTest is BaseTest {
 
   ChangeSdEmissionAdminPayload public payload;
   address constant GUARDIAN = 0xE50c8C619d05ff98b22Adf991F17602C774F785c;
   IEmissionManager constant EMISSION_MANAGER =
     IEmissionManager(0x048f2228D7Bf6776f99aB50cB1b1eaB4D1d4cA73);
-  IEACAggregatorProxy constant REWARD_ORACLE =
-    IEACAggregatorProxy(0x0D276FC14719f9292D5C1eA2198673d1f4269246); // OP/USD
-
-  ITransferStrategyBase constant TRANSFER_STRATEGY =
-    ITransferStrategyBase(0x80B2a024A0f347e774ec3bc58304978FB3DFc940);
-
-  uint256 constant TOTAL_DISTRIBUTION = 5_000_000 ether; // 5m OP
-  uint88 constant DURATION_DISTRIBUTION = 90 days;
 
   function setUp() public {
     vm.createSelectFork(vm.rpcUrl('polygon'), 35462470);
-    /// @dev chains that are controlled by crosschain governance need to execute a proposal to set the emission admin
     payload = new ChangeSdEmissionAdminPayload();
     _setUp(AaveV3Polygon.ACL_ADMIN);
     _execute(address(payload));
-
-    // vm.startPrank(GUARDIAN);
-    // /// @dev only necessary if the OP_EMISSION_ADMIN doesn't have permissions
-    // EMISSION_MANAGER.setEmissionAdmin(OP, OP_EMISSION_ADMIN);
-    // vm.stopPrank();
   }
 
-  function test_activation() public {
-    assertEq(EMISSION_MANAGER.getEmissionAdmin(payload.SD()), 0x51358004cFe135E64453d7F6a0dC433CAba09A2a);
+  function testActivation() public {
+    /// verify new admin is correctly set
+    assertEq(EMISSION_MANAGER.getEmissionAdmin(payload.SD()), payload.NEW_EMISSION_ADMIN());
     emit log_named_address('new emission admin for SD rewards', EMISSION_MANAGER.getEmissionAdmin(payload.SD()));
+    /// verify admin can make changes
+    vm.startPrank(payload.NEW_EMISSION_ADMIN());
+    EMISSION_MANAGER.setDistributionEnd(payload.SD(), payload.SD(), 0);
+    vm.stopPrank();
   }
 
   function _toUint88(uint256 value) internal pure returns (uint88) {
